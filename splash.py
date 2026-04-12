@@ -1,81 +1,48 @@
 import tkinter as tk
 import zlib
 
-def decodificar_ascf(route):
-    with open(route, 'rb') as archivo:
-        if archivo.read(4) != b'ASCF':
-            raise ValueError("It is not a valid ASCF file.")
-        
-        archivo.seek(3, 1)
-        
-        len_metadata = int.from_bytes(archivo.read(4), 'little')
-        archivo.seek(len_metadata, 1)
-        
-        len_datos = int.from_bytes(archivo.read(4), 'little')
-        datos_comprimidos = archivo.read(len_datos)
-        datos = zlib.decompress(datos_comprimidos)
-        
-        return datos.decode('utf-8').split('\x00')
-    
-def splash():
-    
-    frame_delay_ms = 42
-    color_text = 'white'
-    
-    try: 
-        frames = decodificar_ascf("assets/frames.bin")
+def decodificar_ascf(path):
+    with open(path, 'rb') as f:
+        if f.read(4) != b'ASCF':
+            raise ValueError("Invalid ASCF file")
 
+        f.seek(3, 1)  # skip version, compression, flags
+        f.seek(int.from_bytes(f.read(4), 'little'), 1)  # skip metadata
+        
+        data = zlib.decompress(f.read(int.from_bytes(f.read(4), 'little')))
+        return [f for f in data.decode().split('\x00') if f]
+
+def splash(path="assets/frames.bin", delay=42, color='white'):
+    try:
+        frames = decodificar_ascf(path)
         if not frames:
             return False
 
-        window = tk.Tk()
+        root = tk.Tk()
+        w, h = root.winfo_screenwidth(), root.winfo_screenheight()
+        gw, gh = w // 3, int(h / 1.3)
 
-        w = window.winfo_screenwidth()
-        h = window.winfo_screenheight()
+        root.geometry(f"{gw}x{gh}+{(w-gw)//2}+{(h-gh)//2}")
+        root.configure(bg='#222222')
+        root.overrideredirect(True)
 
-        gw = int(w // 3)
-        gh = int(h // 1.3)
+        label = tk.Label(root, text='', bg=root['bg'], fg=color,
+                         justify='left', anchor='w',
+                         font=('courier', 7))
+        label.pack(anchor='nw')
 
-        pw = int((w // 2) - (gw // 2))
-        ph = int((h // 2) - (gh // 2))
+        def play(i=0):
+            if i >= len(frames):
+                root.destroy()
+                return
+            label.config(text=frames[i])
+            root.after(delay, play, i+1)
 
-        window.title("Suave")
-        window.geometry(f"{gw}x{gh}+{pw}+{ph}")
-        window.config(background='#222222')
-
-        label = tk.Label(window, 
-                        text=frames[0], 
-                        bg=window.cget('bg'), 
-                        fg=color_text, 
-                        justify='left', 
-                        anchor='w', 
-                        font=('courier', 7, 'normal'))
-
-        label.pack(anchor='nw', expand=False, fill=None)
-
-        def play(index=0):
-            if index < len(frames):
-                label.config(text=frames[index])
-                window.after(frame_delay_ms, play, index + 1)
-            else:
-                window.after(0, window.destroy)
-
-        def close(event):
-            window.destroy()
-        
-        window.bind('<Escape>', close)
-
+        root.bind('<Escape>', lambda e: root.destroy())
         play()
-
-        window.overrideredirect(True)
-
-        window.mainloop()
-
+        root.mainloop()
         return True
 
     except Exception as e:
         print("Error:", e)
         return False
-
-finish = splash()
-print(finish)
